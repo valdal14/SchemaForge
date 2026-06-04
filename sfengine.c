@@ -53,8 +53,30 @@ SchemaType infer_type(const char *token)
     return has_dot == 1 ? TYPE_FLOAT : TYPE_INT; 
 }
 
+/**
+ * @brief Logs a Schema mismatch
+ * @param int current_row 
+ * @param int current_col
+ * @param SchemaType exp
+ * @param SchemaType current
+ * @return void
+ */
+void log_mismatch(int current_row, int current_col, SchemaType exp, SchemaType current)
+{
+    const char *expected_type = type_to_string(exp);
+    const char *current_type = type_to_string(current);
+    fflush(stdout);
+    fprintf(stderr, "Schema Mismatch ar row %d, column %d: Expected %s but got %s\n", current_row, current_col, expected_type, current_type);
+}
+
 int main(void)
 {
+    SchemaType expected_schema[] = {TYPE_INT, TYPE_FLOAT, TYPE_BOOL, TYPE_VARCHAR};
+    int expected_columns = 4;
+    int current_col = 0;
+    int is_header = 1;
+    int current_row = 1;
+
     unsigned char buffer[CHUNK_SIZE];
     size_t bytes_read = 0;
     size_t total_bytes = 0;
@@ -72,14 +94,53 @@ int main(void)
         for(unsigned char *p = buffer; p < (buffer + total_bytes); p++)
         {
             unsigned char current_char = *p;
-            
+           
             if(current_char == ',' || current_char == '\n') 
             {
-                *p = '\0';
-                SchemaType type = infer_type((const char *)token_start);
-                printf("[%s : %s] ", token_start, type_to_string(type));
-                if(current_char == '\n') printf("\n");
-                token_start = (p + 1);
+                if(current_col >= expected_columns)
+                {
+                    fflush(stdout);
+                    fprintf(stderr, "\nColumns Schema Mismatch\n");
+                    return EXIT_FAILURE;
+                }
+                
+                if(is_header == 0)
+                {
+                    *p = '\0';
+                    SchemaType type = infer_type((const char *)token_start);
+                    
+                    if(type != expected_schema[current_col])
+                    {
+                        log_mismatch(current_row, current_col, expected_schema[current_col], type);
+                        return EXIT_FAILURE;
+                    }
+                    else
+                    {
+                        current_col++;
+                    }
+                    
+                    printf("[%s : %s] ", token_start, type_to_string(type));
+
+                    if(current_char == '\n') 
+                    {
+                        current_col = 0;
+                        current_row++;
+                        printf("\n");
+                    }
+
+                    token_start = (p + 1);
+                }
+
+                if(is_header == 1)
+                {
+                    if(current_char == '\n')
+                    {
+                        printf("\n"); 
+                        is_header = 0;
+                    }
+                    
+                    token_start = (p + 1);
+                }
             }
         }
 
